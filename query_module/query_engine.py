@@ -1,21 +1,28 @@
 import os
-import openai
 import re
 from typing import Dict, List, Optional, Tuple
 import logging
 from scanner_module.db_connector import DatabaseConnector
+import json
+import google.generativeai as genai
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 class NaturalLanguageQueryEngine:
 
-    def __init__(self, api_key: str = None, db_connector: DatabaseConnector = None):
-        self.api_key = api_key or os.getenv('OPENAI_API_KEY')
+    def __init__(self, api_key: str = None, db_connector: DatabaseConnector = None, model_name: str = None):
+        self.api_key = api_key or os.getenv('GEMINI_API_KEY')
+        self.model_name = model_name or os.getenv('GEMINI_MODEL', 'gemini-1.5-flash')
         self.db_connector = db_connector or DatabaseConnector()
 
         if self.api_key:
-            openai.api_key = self.api_key
+            genai.configure(api_key=self.api_key)
+        try:
+            self.gemini_model = genai.GenerativeModel(self.model_name) if self.api_key else None
+        except Exception as e:
+            logger.error(f"Error inicializando modelo Gemini: {e}")
+            self.gemini_model = None
 
         # Patrones comunes de consulta
         self.query_patterns = {
@@ -282,43 +289,25 @@ Tecnologías más populares:"""
 
     def _process_with_ai(self, query: str) -> Dict:
         try:
-            # Obtener contexto de la BD
+            if not self.gemini_model:
+                return {'success': False, 'explanation': f"El modelo Gemini '{self.model_name}' no está disponible. Verifica tu clave y modelo. Puedes listar modelos con: genai.list_models()"}
             all_repos = self.db_connector.get_all_repositories(limit=50)
-
             context = f"""
 Base de datos CMDB con {len(all_repos)} repositorios.
 Campos disponibles: url, owner_name, repo_name, technologies, is_identified, status, ai_explanation.
-
 Repositorios de muestra:
 """
             for repo in all_repos[:3]:
                 context += f"- {repo.get('owner_name', 'N/A')}/{repo.get('repo_name', 'N/A')} (Tecnologías: {', '.join(repo.get('technologies', []))})\n"
-
             prompt = f"""
-Consulta del usuario: "{query}"
-
+Consulta del usuario: \"{query}\"
 Contexto de la base de datos:
 {context}
-
-Traduce esta consulta a una respuesta útil. Si es una pregunta específica sobre repositorios, proporciona una respuesta basada en los datos disponibles.
-Responde en español de forma clara y directa.
+Traduce esta consulta a una respuesta útil. Si es una pregunta específica sobre repositorios, proporciona una respuesta basada en los datos disponibles.\nResponde en español de forma clara y directa.
 """
-
-            response = openai.ChatCompletion.create(
-                model="gpt-3.5-turbo",
-                messages=[
-                    {"role": "system", "content": "Eres un asistente experto en consultas de bases de datos CMDB. Proporciona respuestas claras y útiles."},
-                    {"role": "user", "content": prompt}
-                ],
-                max_tokens=500,
-                temperature=0.7
-            )
-
-            ai_response = response.choices[0].message.content.strip()
-
-            # Guardar consulta
+            response = self.gemini_model.generate_content(prompt)
+            ai_response = response.text.strip()
             self.db_connector.save_ai_query(query, ai_response, 'natural_language')
-
             return {
                 'success': True,
                 'explanation': ai_response,
@@ -326,10 +315,9 @@ Responde en español de forma clara y directa.
                 'count': 0,
                 'ai_processed': True
             }
-
         except Exception as e:
-            logger.error(f"Error procesando con IA: {e}")
-            return self._process_fallback(query)
+            logger.error(f"Error procesando con Gemini: {e}")
+            return {'success': False, 'explanation': f"Error procesando con Gemini: {e}. Verifica que el modelo '{self.model_name}' esté disponible para tu clave. Puedes listar modelos con: genai.list_models()"}
 
     def _process_fallback(self, query: str) -> Dict:
         return {
@@ -348,3 +336,34 @@ Responde en español de forma clara y directa.
             "estadísticas del sistema",
             "¿cuántos repositorios hay?"
         ]
+
+    def ask_open_question(self, question: str, context: str = None) -> str:
+        if not self.gemini_model:
+            logger.warning(f"No se encontró modelo Gemini '{self.model_name}'.")
+            return f"No se puede procesar la pregunta sin modelo Gemini válido. Puedes listar modelos con: genai.list_models()"
+        prompt = f"""
+Eres un asistente experto en gestión de bases de datos de configuración (CMDB). Responde la siguiente pregunta de forma clara y precisa. Si tienes contexto adicional, úsalo para mejorar la respuesta.\nPregunta: {question}
+"""
+        if context:
+            prompt += f"\nContexto: {context}\n"
+        try:
+            response = self.gemini_model.generate_content(prompt)
+            return response.text.strip()
+        except Exception as e:
+            logger.error(f"Error al consultar Gemini: {e}")
+            return f"Ocurrió un error al procesar la pregunta con Gemini: {e}. Verifica que el modelo '{self.model_name}' esté disponible."
+
+    def summarize_results(self, results: List[Dict], question: str = None) -> str:
+        if not self.gemini_model:
+            logger.warning(f"No se encontró modelo Gemini '{self.model_name}'.")
+            return f"No se puede resumir sin modelo Gemini válido. Puedes listar modelos con: genai.list_models()"
+        prompt = "Estos son los resultados de una consulta a la CMDB. Resume los puntos clave de forma clara y breve."
+        if question:
+            prompt += f"\nPregunta original: {question}"
+        prompt += f"\nResultados: {json.dumps(results, ensure_ascii=False, indent=2)}"
+        try:
+            response = self.gemini_model.generate_content(prompt)
+            return response.text.strip()
+        except Exception as e:
+            logger.error(f"Error al resumir resultados con Gemini: {e}")
+            return f"Ocurrió un error al resumir los resultados con Gemini: {e}. Verifica que el modelo '{self.model_name}' esté disponible."

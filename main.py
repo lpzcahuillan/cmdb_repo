@@ -302,6 +302,34 @@ class CMDBTool:
                 'error': str(e)
             }
 
+    def ask_open_question(self, question: str, context: str = None) -> str:
+        """
+        Permite hacer preguntas abiertas sobre la CMDB usando LLM.
+        Args:
+            question (str): Pregunta en lenguaje natural.
+            context (str, optional): Contexto adicional.
+        Returns:
+            str: Respuesta generada por IA.
+        """
+        return self.query_engine.ask_open_question(question, context)
+
+    def summarize_results(self, results_json: str, question: str = None) -> str:
+        """
+        Resume resultados de una consulta usando LLM.
+        Args:
+            results_json (str): Resultados en formato JSON.
+            question (str, optional): Pregunta original.
+        Returns:
+            str: Resumen generado por IA.
+        """
+        try:
+            import json
+            results = json.loads(results_json)
+        except Exception as e:
+            logger.error(f"Error al parsear resultados: {e}")
+            return "Formato de resultados inválido. Debe ser JSON."
+        return self.query_engine.summarize_results(results, question)
+
 def main():
     """Función principal del programa"""
     parser = argparse.ArgumentParser(

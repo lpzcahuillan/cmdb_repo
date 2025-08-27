@@ -21,7 +21,7 @@ class DatabaseConnector:
 
         self.connection_string = (
             f"host={self.host} "
-            f"database={self.database} "
+            f"dbname={self.database} "
             f"user={self.user} "
             f"password={self.password} "
             f"port={self.port}"

@@ -78,7 +78,8 @@ DB_NAME=cmdb_database
 DB_USER=postgres
 DB_PASSWORD=tu_password
 DB_PORT=5432
-OPENAI_API_KEY=tu_api_key_openai  # Opcional
+GEMINI_API_KEY=tu_clave_api_de_gemini
+# (opcional) GEMINI_MODEL=gemini-1.0-pro
 ```
 
 ## 🎯 Uso de la Herramienta
@@ -195,7 +196,7 @@ RECOMENDACIONES:
 
 ### 2. Validator Module (`validator_module/`)
 - **validator.py**: Validación y análisis con IA
-- Integración con OpenAI GPT
+- Integración con Gemini (Google Generative AI)
 - Explicaciones contextualizadas
 - Análisis de patrones de repositorios
 
@@ -222,9 +223,10 @@ sudo service postgresql start
 - Confirmar que el repositorio sea público
 - Revisar configuración de Git
 
-#### Error de API de OpenAI
+#### Error de API de Gemini
 - Verificar clave API válida
-- Confirmar créditos disponibles
+- Confirmar que el modelo configurado esté disponible para tu clave
+- Si ves un error de modelo no soportado, consulta la sección de configuración de Gemini
 - La herramienta funciona sin IA con funcionalidad limitada
 
 ## 📈 Rendimiento y Escalabilidad
@@ -324,3 +326,36 @@ Este proyecto está desarrollado como herramienta educativa para equipos de desa
 ---
 
 **¡Desarrollado con ❤️ para facilitar la gestión de configuraciones en equipos de desarrollo!**
+
+## 🤖 Integración con Gemini (Google Generative AI)
+
+A partir de la versión actual, CMDB Tool utiliza **Gemini** (Google Generative AI) para todas las capacidades de IA, como:
+- Consultas en lenguaje natural
+- Resúmenes automáticos
+- Explicaciones y validaciones inteligentes
+
+### Configuración de la API de Gemini (Free)
+
+1. **Obtén tu clave de API gratuita de Gemini** en https://aistudio.google.com/app/apikey
+2. Define la variable de entorno en tu sistema o en el archivo `.env`:
+   ```env
+   GEMINI_API_KEY=tu_clave_api_de_gemini
+   # (opcional) para cambiar el modelo:
+   GEMINI_MODEL=gemini-1.0-pro
+   ```
+   Si tienes problemas de modelo no soportado, puedes listar los modelos disponibles con este script:
+   ```python
+   import google.generativeai as genai
+   genai.configure(api_key="TU_API_KEY")
+   print([m.name for m in genai.list_models()])
+   ```
+   Usa el nombre exacto de un modelo soportado en `GEMINI_MODEL`.
+
+### Requisitos de instalación
+
+Asegúrate de instalar las dependencias con:
+```sh
+pip install -r requirements.txt
+```
+El archivo `requirements.txt` incluye:
+- `google-generativeai` (Gemini)

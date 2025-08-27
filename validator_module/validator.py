@@ -1,5 +1,5 @@
 import os
-import openai
+import google.generativeai as genai
 from typing import Dict, List, Optional
 import logging
 import json
@@ -22,14 +22,15 @@ class AIValidator:
             api_key: Clave API de OpenAI (opcional, puede usar variable de entorno)
             db_connector: Conector de base de datos
         """
-        self.api_key = api_key or os.getenv('OPENAI_API_KEY')
+        self.api_key = api_key or os.getenv('GEMINI_API_KEY')
         if not self.api_key:
-            logger.warning("No se proporcionó clave API de OpenAI. Funcionalidad de IA limitada.")
+            logger.warning("No se proporcionó clave API de Gemini. Funcionalidad de IA limitada.")
 
         # Configurar cliente OpenAI
         if self.api_key:
-            openai.api_key = self.api_key
+            genai.configure(api_key=self.api_key)
 
+        self.gemini_model = genai.GenerativeModel('gemini-pro') if self.api_key else None
         self.db_connector = db_connector or DatabaseConnector()
 
         # Prompts para análisis
@@ -94,7 +95,7 @@ Proporciona un análisis de:
             str: Explicación detallada generada por IA
         """
         try:
-            if not self.api_key:
+            if not self.gemini_model:
                 return self._generate_fallback_explanation(repo_data, file_analysis)
 
             # Preparar datos para el prompt
@@ -112,20 +113,8 @@ Proporciona un análisis de:
             )
 
             # Llamada a OpenAI API
-            response = openai.ChatCompletion.create(
-                model="gpt-3.5-turbo",
-                messages=[
-                    {
-                        "role": "system",
-                        "content": "Eres un experto en análisis de repositorios de código y arquitectura de software. Proporciona análisis técnicos detallados y útiles."
-                    },
-                    {"role": "user", "content": prompt}
-                ],
-                max_tokens=1000,
-                temperature=0.7
-            )
-
-            ai_explanation = response.choices[0].message.content.strip()
+            response = self.gemini_model.generate_content(prompt)
+            ai_explanation = response.text.strip()
 
             # Guardar consulta en base de datos
             self.db_connector.save_ai_query(
@@ -137,7 +126,7 @@ Proporciona un análisis de:
             return ai_explanation
 
         except Exception as e:
-            logger.error(f"Error al generar explicación con IA: {e}")
+            logger.error(f"Error al generar explicación con Gemini: {e}")
             return self._generate_fallback_explanation(repo_data, file_analysis)
 
     def _generate_fallback_explanation(self, repo_data: Dict, file_analysis: Dict = None) -> str:
@@ -203,7 +192,7 @@ RECOMENDACIONES:
             Dict[str, str]: Mapeo de extensión a tecnología sugerida
         """
         try:
-            if not self.api_key or not extensions:
+            if not self.gemini_model or not extensions:
                 return self._get_basic_technology_suggestions(extensions)
 
             prompt = self.prompts['technology_suggestion'].format(
@@ -211,17 +200,8 @@ RECOMENDACIONES:
                 structure="Estructura básica de directorios"
             )
 
-            response = openai.ChatCompletion.create(
-                model="gpt-3.5-turbo",
-                messages=[
-                    {"role": "system", "content": "Eres un experto en tecnologías de desarrollo de software."},
-                    {"role": "user", "content": prompt}
-                ],
-                max_tokens=500,
-                temperature=0.5
-            )
-
-            suggestions_text = response.choices[0].message.content.strip()
+            response = self.gemini_model.generate_content(prompt)
+            suggestions_text = response.text.strip()
 
             # Guardar consulta
             self.db_connector.save_ai_query(
@@ -233,7 +213,7 @@ RECOMENDACIONES:
             return {'ai_analysis': suggestions_text}
 
         except Exception as e:
-            logger.error(f"Error al sugerir tecnologías con IA: {e}")
+            logger.error(f"Error al sugerir tecnologías con Gemini: {e}")
             return self._get_basic_technology_suggestions(extensions)
 
     def _get_basic_technology_suggestions(self, extensions: List[str]) -> Dict[str, str]:
@@ -282,7 +262,7 @@ RECOMENDACIONES:
             str: Resumen técnico
         """
         try:
-            if not self.api_key:
+            if not self.gemini_model:
                 return self._generate_basic_summary(repo_data)
 
             prompt = self.prompts['repository_summary'].format(
@@ -292,17 +272,8 @@ RECOMENDACIONES:
                 owner=repo_data.get('owner_name', 'No especificado')
             )
 
-            response = openai.ChatCompletion.create(
-                model="gpt-3.5-turbo",
-                messages=[
-                    {"role": "system", "content": "Eres un arquitecto de software experto que proporciona análisis técnicos precisos."},
-                    {"role": "user", "content": prompt}
-                ],
-                max_tokens=800,
-                temperature=0.6
-            )
-
-            summary = response.choices[0].message.content.strip()
+            response = self.gemini_model.generate_content(prompt)
+            summary = response.text.strip()
 
             # Guardar consulta
             self.db_connector.save_ai_query(
@@ -314,7 +285,7 @@ RECOMENDACIONES:
             return summary
 
         except Exception as e:
-            logger.error(f"Error al generar resumen con IA: {e}")
+            logger.error(f"Error al generar resumen con Gemini: {e}")
             return self._generate_basic_summary(repo_data)
 
     def _generate_basic_summary(self, repo_data: Dict) -> str:
